@@ -1,11 +1,17 @@
-// دالة JSONP للاتصال بـ Apps Script
-function jsonpRequest(data, callback) {
-    const callbackName = 'callback' + Date.now();
+// ==================== الرابط الرئيسي ====================
+const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbyo1vB4L2y25qAggxXw3AG-XnCPQI39WwS1amuAPIDuPJkTjPzmM1zrz-RSSZaF5B24/exec';
+
+// ==================== متغيرات عامة ====================
+let currentUser = null;
+let currentPage = 'dashboard';
+
+// ==================== دالة JSONP الموحدة ====================
+function callAppsScript(data, callback) {
+    const callbackName = 'cb_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
     
-    // تحويل البيانات إلى query string
+    // تحويل البيانات إلى نص الاستعلام
     const queryString = Object.keys(data).map(key => {
-        const value = typeof data[key] === 'object' ? 
-            JSON.stringify(data[key]) : data[key];
+        const value = typeof data[key] === 'object' ? JSON.stringify(data[key]) : data[key];
         return encodeURIComponent(key) + '=' + encodeURIComponent(value);
     }).join('&');
     
@@ -13,94 +19,98 @@ function jsonpRequest(data, callback) {
     
     // إنشاء دالة الكولباك
     window[callbackName] = function(response) {
-        if (document.head.contains(script)) {
-            document.head.removeChild(script);
+        if (document.getElementById(callbackName + '_script')) {
+            document.head.removeChild(document.getElementById(callbackName + '_script'));
         }
         delete window[callbackName];
         callback(response);
     };
     
-    // إنشاء عنصر script وإضافته
+    // إنشاء عنصر script
     const script = document.createElement('script');
+    script.id = callbackName + '_script';
     script.src = url;
+    
     script.onerror = function() {
-        alert('❌ فشل الاتصال بالخادم');
-        if (document.head.contains(script)) {
-            document.head.removeChild(script);
+        alert('❌ فشل الاتصال بالخادم. تحقق من الرابط أو الإنترنت');
+        if (document.getElementById(callbackName + '_script')) {
+            document.head.removeChild(document.getElementById(callbackName + '_script'));
         }
         delete window[callbackName];
+        callback({ success: false, message: 'فشل الاتصال' });
     };
+    
     document.head.appendChild(script);
 }
 
-const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwvlyXwWbG8y82x4LQOtvrolcP1fAcuZQxrqOI1XuZ2wYkc9r5df6n7Fe1QeQ1sUmET/exec';
-let currentUser = null;
-let currentPage = 'dashboard';
-
-// تهيئة التطبيق
+// ==================== التحقق من تسجيل الدخول ====================
 document.addEventListener('DOMContentLoaded', function() {
-    // التحقق من تسجيل الدخول
     const userData = localStorage.getItem('user');
     if (!userData) {
-        window.location.href = 'index.html';
+        if (!window.location.href.includes('index.html')) {
+            window.location.href = 'index.html';
+        }
         return;
     }
     
     currentUser = JSON.parse(userData);
-    updateUI();
-    loadPage('dashboard');
     
-    // أحداث التنقل
+    // تحديث معلومات المستخدم
+    const usernameDisplay = document.getElementById('usernameDisplay');
+    const userRole = document.getElementById('userRole');
+    if (usernameDisplay) usernameDisplay.textContent = currentUser.username;
+    if (userRole) {
+        userRole.textContent = currentUser.role === 'Admin' ? 'مدير النظام' :
+                              currentUser.role === 'Staff' ? 'موظف' : 'طالب';
+    }
+    
+    // إخفاء العناصر حسب الصلاحيات
+    if (currentUser.role === 'Student') {
+        const studentsLink = document.querySelector('[data-page="students"]');
+        const statsLink = document.querySelector('[data-page="statistics"]');
+        if (studentsLink) studentsLink.style.display = 'none';
+        if (statsLink) statsLink.style.display = 'none';
+    }
+    
+    // إضافة مستمعات الأحداث للقائمة
     document.querySelectorAll('.nav-item').forEach(item => {
         item.addEventListener('click', function(e) {
             e.preventDefault();
             const page = this.dataset.page;
-            setActiveNav(this);
+            
+            // تحديث الشكل
+            document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+            this.classList.add('active');
+            
+            // تحديث العنوان
+            const pageTitle = document.getElementById('pageTitle');
+            if (pageTitle) pageTitle.textContent = this.querySelector('span').textContent;
+            
+            // تحميل الصفحة
+            currentPage = page;
             loadPage(page);
         });
     });
+    
+    // تحميل الصفحة الرئيسية
+    loadPage('dashboard');
 });
 
-// تحديث واجهة المستخدم
-function updateUI() {
-    if (currentUser) {
-        document.getElementById('usernameDisplay').textContent = currentUser.username;
-        document.getElementById('userRole').textContent = 
-            currentUser.role === 'Admin' ? 'مدير النظام' :
-            currentUser.role === 'Staff' ? 'موظف' : 'طالب';
-        
-        // إخفاء العناصر حسب الصلاحيات
-        if (currentUser.role === 'Student') {
-            document.querySelector('[data-page="students"]').style.display = 'none';
-            document.querySelector('[data-page="statistics"]').style.display = 'none';
-        }
-    }
-}
-
-// تبديل الشريط الجانبي
+// ==================== تبديل الشريط الجانبي ====================
 function toggleSidebar() {
     document.getElementById('sidebar').classList.toggle('collapsed');
 }
 
-// تسجيل الخروج
+// ==================== تسجيل الخروج ====================
 function logout() {
     localStorage.removeItem('user');
     window.location.href = 'index.html';
 }
 
-// تعيين العنصر النشط في القائمة
-function setActiveNav(activeItem) {
-    document.querySelectorAll('.nav-item').forEach(item => {
-        item.classList.remove('active');
-    });
-    activeItem.classList.add('active');
-    currentPage = activeItem.dataset.page;
-    document.getElementById('pageTitle').textContent = activeItem.querySelector('span').textContent;
-}
-
-// تحميل الصفحة المطلوبة
+// ==================== تحميل الصفحات ====================
 function loadPage(page) {
     const contentBody = document.getElementById('contentBody');
+    if (!contentBody) return;
     
     switch(page) {
         case 'dashboard':
@@ -110,6 +120,7 @@ function loadPage(page) {
         case 'absences':
             contentBody.innerHTML = getAbsencesHTML();
             loadAbsencesData();
+            loadModulesAndStudents();
             break;
         case 'justifications':
             contentBody.innerHTML = getJustificationsHTML();
@@ -130,7 +141,7 @@ function loadPage(page) {
     }
 }
 
-// دوال إنشاء HTML للصفحات
+// ==================== HTML القوالب ====================
 function getDashboardHTML() {
     return `
         <div class="stats-grid">
@@ -143,7 +154,6 @@ function getDashboardHTML() {
                     <span class="stat-number" id="totalAbsences">0</span>
                 </div>
             </div>
-            
             <div class="stat-card">
                 <div class="stat-icon orange">
                     <i class="fas fa-clock"></i>
@@ -153,7 +163,6 @@ function getDashboardHTML() {
                     <span class="stat-number" id="pendingJustifications">0</span>
                 </div>
             </div>
-            
             <div class="stat-card">
                 <div class="stat-icon green">
                     <i class="fas fa-check-circle"></i>
@@ -163,7 +172,6 @@ function getDashboardHTML() {
                     <span class="stat-number" id="approvedJustifications">0</span>
                 </div>
             </div>
-            
             <div class="stat-card">
                 <div class="stat-icon red">
                     <i class="fas fa-redo-alt"></i>
@@ -174,7 +182,6 @@ function getDashboardHTML() {
                 </div>
             </div>
         </div>
-        
         <div class="charts-grid">
             <div class="chart-card">
                 <h3>أكثر المقاييس غيابات</h3>
@@ -195,30 +202,25 @@ function getAbsencesHTML() {
                         <option value="">اختر الطالب...</option>
                     </select>
                 </div>
-                
                 <div class="form-group">
                     <label>المادة</label>
                     <select id="moduleId" required>
                         <option value="">اختر المادة...</option>
                     </select>
                 </div>
-                
                 <div class="form-group">
                     <label>تاريخ الامتحان</label>
                     <input type="date" id="examDate" required>
                 </div>
-                
                 <div class="form-group">
                     <label>السبب (اختياري)</label>
                     <textarea id="reason"></textarea>
                 </div>
-                
                 <div class="form-actions">
                     <button type="submit" class="btn-primary">تسجيل الغياب</button>
                 </div>
             </form>
         </div>
-        
         <div class="table-container">
             <table class="data-table">
                 <thead>
@@ -268,28 +270,23 @@ function getStudentsHTML() {
                     <label>الاسم الكامل</label>
                     <input type="text" id="studentName" required>
                 </div>
-                
                 <div class="form-group">
                     <label>البريد الإلكتروني</label>
                     <input type="email" id="studentEmail" required>
                 </div>
-                
                 <div class="form-group">
                     <label>التخصص</label>
                     <input type="text" id="studentMajor" required>
                 </div>
-                
                 <div class="form-group">
                     <label>السنة الدراسية</label>
                     <input type="number" id="studentYear" min="1" max="5" required>
                 </div>
-                
                 <div class="form-actions">
                     <button type="submit" class="btn-primary">إضافة طالب</button>
                 </div>
             </form>
         </div>
-        
         <div class="table-container">
             <table class="data-table">
                 <thead>
@@ -318,30 +315,25 @@ function getRetakeHTML() {
                         <option value="">اختر الطالب...</option>
                     </select>
                 </div>
-                
                 <div class="form-group">
                     <label>المادة</label>
                     <select id="retakeModuleId" required>
                         <option value="">اختر المادة...</option>
                     </select>
                 </div>
-                
                 <div class="form-group">
                     <label>تاريخ الامتحان</label>
                     <input type="datetime-local" id="retakeDate" required>
                 </div>
-                
                 <div class="form-group">
                     <label>القاعة</label>
                     <input type="text" id="retakeRoom" required>
                 </div>
-                
                 <div class="form-actions">
                     <button type="submit" class="btn-primary">إنشاء الامتحان</button>
                 </div>
             </form>
         </div>
-        
         <div class="table-container">
             <table class="data-table">
                 <thead>
@@ -366,13 +358,11 @@ function getStatisticsHTML() {
                 <h3>نسبة الغياب حسب المقياس</h3>
                 <canvas id="modulesChart"></canvas>
             </div>
-            
             <div class="chart-card">
                 <h3>الغيابات الشهرية</h3>
                 <canvas id="monthlyChart"></canvas>
             </div>
         </div>
-        
         <div class="table-container" style="margin-top: 20px;">
             <h3>تفاصيل الإحصائيات</h3>
             <table class="data-table">
@@ -389,19 +379,13 @@ function getStatisticsHTML() {
     `;
 }
 
-// ==================== دوال تحميل البيانات باستخدام JSONP ====================
-
-// تحميل بيانات لوحة التحكم
+// ==================== دوال تحميل البيانات ====================
 function loadDashboardData() {
-    const data = {
+    callAppsScript({
         action: 'getStatistics',
         username: currentUser.username,
         password: currentUser.password
-    };
-    
-    jsonpRequest(data, function(response) {
-        console.log('📥 إحصائيات:', response);
-        
+    }, function(response) {
         if (response && response.success) {
             document.getElementById('totalAbsences').textContent = response.statistics.totalAbsences;
             document.getElementById('pendingJustifications').textContent = response.statistics.pendingJustifications;
@@ -409,175 +393,153 @@ function loadDashboardData() {
             document.getElementById('eligibleStudents').textContent = response.statistics.approvedJustifications;
             
             // رسم بياني
-            const ctx = document.getElementById('absencesChart').getContext('2d');
-            new Chart(ctx, {
-                type: 'bar',
-                data: {
-                    labels: response.statistics.topModules.map(m => m.moduleName),
-                    datasets: [{
-                        label: 'عدد الغيابات',
-                        data: response.statistics.topModules.map(m => m.count),
-                        backgroundColor: 'rgba(102, 126, 234, 0.5)',
-                        borderColor: 'rgba(102, 126, 234, 1)',
-                        borderWidth: 1
-                    }]
-                },
-                options: {
-                    scales: {
-                        y: {
-                            beginAtZero: true
-                        }
+            const ctx = document.getElementById('absencesChart')?.getContext('2d');
+            if (ctx && response.statistics.topModules.length > 0) {
+                new Chart(ctx, {
+                    type: 'bar',
+                    data: {
+                        labels: response.statistics.topModules.map(m => m.moduleName),
+                        datasets: [{
+                            label: 'عدد الغيابات',
+                            data: response.statistics.topModules.map(m => m.count),
+                            backgroundColor: 'rgba(102, 126, 234, 0.5)',
+                            borderColor: 'rgba(102, 126, 234, 1)',
+                            borderWidth: 1
+                        }]
+                    },
+                    options: {
+                        scales: { y: { beginAtZero: true } }
                     }
-                }
-            });
+                });
+            }
         }
     });
 }
 
-// تحميل بيانات الغيابات
-function loadAbsencesData() {
-    const data = {
-        action: 'getAbsences',
-        username: currentUser.username,
-        password: currentUser.password
-    };
-    
-    jsonpRequest(data, function(response) {
-        console.log('📥 الغيابات:', response);
-        
-        if (response && response.success) {
-            const tbody = document.getElementById('absencesTableBody');
-            tbody.innerHTML = '';
-            
-            response.absences.forEach(absence => {
-                const row = tbody.insertRow();
-                row.innerHTML = `
-                    <td>${absence.absenceId}</td>
-                    <td>${absence.studentId}</td>
-                    <td>${absence.moduleId}</td>
-                    <td>${absence.examDate}</td>
-                    <td>
-                        <span class="status-badge status-${absence.status.toLowerCase()}">
-                            ${absence.status === 'Pending' ? 'قيد الانتظار' :
-                              absence.status === 'Approved' ? 'مقبول' : 'مرفوض'}
-                        </span>
-                    </td>
-                    <td>
-                        ${currentUser.role !== 'Student' && absence.status === 'Pending' ?
-                            `<button class="action-btn btn-approve" onclick="updateAbsenceStatus('${absence.absenceId}', 'Approved')">
-                                <i class="fas fa-check"></i>
-                            </button>
-                            <button class="action-btn btn-reject" onclick="updateAbsenceStatus('${absence.absenceId}', 'Rejected')">
-                                <i class="fas fa-times"></i>
-                            </button>` : ''}
-                    </td>
-                `;
-            });
-        }
-        
-        // تحميل البيانات للقوائم المنسدلة
-        loadModulesForSelect();
-    });
-}
-
-// تحميل بيانات التبريرات
-function loadJustificationsData() {
-    const data = {
-        action: 'getAbsences',
-        username: currentUser.username,
-        password: currentUser.password
-    };
-    
-    jsonpRequest(data, function(response) {
-        console.log('📥 التبريرات:', response);
-        
-        if (response && response.success) {
-            const tbody = document.getElementById('justificationsTableBody');
-            tbody.innerHTML = '';
-            
-            response.absences.filter(a => a.justificationFile).forEach(absence => {
-                const row = tbody.insertRow();
-                row.innerHTML = `
-                    <td>${absence.absenceId}</td>
-                    <td>${absence.studentId}</td>
-                    <td>${absence.moduleId}</td>
-                    <td>${absence.examDate}</td>
-                    <td>${absence.reason || 'لا يوجد'}</td>
-                    <td>
-                        <button class="action-btn btn-view" onclick="window.open('${absence.justificationFile}')">
-                            <i class="fas fa-eye"></i> عرض
-                        </button>
-                    </td>
-                    <td>
-                        <span class="status-badge status-${absence.status.toLowerCase()}">
-                            ${absence.status === 'Pending' ? 'قيد الانتظار' :
-                              absence.status === 'Approved' ? 'مقبول' : 'مرفوض'}
-                        </span>
-                    </td>
-                    <td>
-                        ${currentUser.role !== 'Student' && absence.status === 'Pending' ?
-                            `<button class="action-btn btn-approve" onclick="updateAbsenceStatus('${absence.absenceId}', 'Approved')">
-                                <i class="fas fa-check"></i> قبول
-                            </button>
-                            <button class="action-btn btn-reject" onclick="updateAbsenceStatus('${absence.absenceId}', 'Rejected')">
-                                <i class="fas fa-times"></i> رفض
-                            </button>` : ''}
-                    </td>
-                `;
-            });
-        }
-    });
-}
-
-// تحميل بيانات الطلاب
 function loadStudentsData() {
-    const data = {
+    callAppsScript({
         action: 'getStudents',
         username: currentUser.username,
         password: currentUser.password
-    };
-    
-    jsonpRequest(data, function(response) {
-        console.log('📥 الطلاب:', response);
-        
+    }, function(response) {
         if (response && response.success) {
             const tbody = document.getElementById('studentsTableBody');
-            tbody.innerHTML = '';
-            
-            response.students.forEach(student => {
-                const row = tbody.insertRow();
-                row.innerHTML = `
-                    <td>${student.studentId}</td>
-                    <td>${student.name}</td>
-                    <td>${student.email}</td>
-                    <td>${student.major}</td>
-                    <td>${student.year}</td>
-                `;
-            });
+            if (tbody) {
+                tbody.innerHTML = '';
+                response.students.forEach(student => {
+                    tbody.innerHTML += `
+                        <tr>
+                            <td>${student.studentId}</td>
+                            <td>${student.name}</td>
+                            <td>${student.email}</td>
+                            <td>${student.major}</td>
+                            <td>${student.year}</td>
+                        </tr>
+                    `;
+                });
+            }
         }
-        
-        // تحميل المواد للقوائم المنسدلة
-        loadModulesForSelect();
     });
 }
 
-// تحميل بيانات الاستدراك
-function loadRetakeData() {
+function loadAbsencesData() {
+    callAppsScript({
+        action: 'getAbsences',
+        username: currentUser.username,
+        password: currentUser.password
+    }, function(response) {
+        if (response && response.success) {
+            const tbody = document.getElementById('absencesTableBody');
+            if (tbody) {
+                tbody.innerHTML = '';
+                response.absences.forEach(absence => {
+                    tbody.innerHTML += `
+                        <tr>
+                            <td>${absence.absenceId}</td>
+                            <td>${absence.studentId}</td>
+                            <td>${absence.moduleId}</td>
+                            <td>${absence.examDate}</td>
+                            <td>
+                                <span class="status-badge status-${absence.status.toLowerCase()}">
+                                    ${absence.status === 'Pending' ? 'قيد الانتظار' :
+                                      absence.status === 'Approved' ? 'مقبول' : 'مرفوض'}
+                                </span>
+                            </td>
+                            <td>
+                                ${currentUser.role !== 'Student' && absence.status === 'Pending' ?
+                                    `<button class="action-btn btn-approve" onclick="updateAbsenceStatus('${absence.absenceId}', 'Approved')">
+                                        <i class="fas fa-check"></i>
+                                    </button>
+                                    <button class="action-btn btn-reject" onclick="updateAbsenceStatus('${absence.absenceId}', 'Rejected')">
+                                        <i class="fas fa-times"></i>
+                                    </button>` : ''}
+                            </td>
+                        </tr>
+                    `;
+                });
+            }
+        }
+    });
+}
+
+function loadJustificationsData() {
+    callAppsScript({
+        action: 'getAbsences',
+        username: currentUser.username,
+        password: currentUser.password
+    }, function(response) {
+        if (response && response.success) {
+            const tbody = document.getElementById('justificationsTableBody');
+            if (tbody) {
+                tbody.innerHTML = '';
+                response.absences.filter(a => a.justificationFile).forEach(absence => {
+                    tbody.innerHTML += `
+                        <tr>
+                            <td>${absence.absenceId}</td>
+                            <td>${absence.studentId}</td>
+                            <td>${absence.moduleId}</td>
+                            <td>${absence.examDate}</td>
+                            <td>${absence.reason || 'لا يوجد'}</td>
+                            <td>
+                                <button class="action-btn btn-view" onclick="window.open('${absence.justificationFile}')">
+                                    <i class="fas fa-eye"></i> عرض
+                                </button>
+                            </td>
+                            <td>
+                                <span class="status-badge status-${absence.status.toLowerCase()}">
+                                    ${absence.status === 'Pending' ? 'قيد الانتظار' :
+                                      absence.status === 'Approved' ? 'مقبول' : 'مرفوض'}
+                                </span>
+                            </td>
+                            <td>
+                                ${currentUser.role !== 'Student' && absence.status === 'Pending' ?
+                                    `<button class="action-btn btn-approve" onclick="updateAbsenceStatus('${absence.absenceId}', 'Approved')">
+                                        <i class="fas fa-check"></i> قبول
+                                    </button>
+                                    <button class="action-btn btn-reject" onclick="updateAbsenceStatus('${absence.absenceId}', 'Rejected')">
+                                        <i class="fas fa-times"></i> رفض
+                                    </button>` : ''}
+                            </td>
+                        </tr>
+                    `;
+                });
+            }
+        }
+    });
+}
+
+function loadModulesAndStudents() {
     // تحميل المواد
-    const modulesData = {
+    callAppsScript({
         action: 'getModules',
         username: currentUser.username,
         password: currentUser.password
-    };
-    
-    jsonpRequest(modulesData, function(modulesResponse) {
-        console.log('📥 المواد:', modulesResponse);
-        
-        if (modulesResponse && modulesResponse.success) {
-            const moduleSelect = document.getElementById('retakeModuleId');
+    }, function(response) {
+        if (response && response.success) {
+            const moduleSelect = document.getElementById('moduleId');
             if (moduleSelect) {
                 moduleSelect.innerHTML = '<option value="">اختر المادة...</option>';
-                modulesResponse.modules.forEach(module => {
+                response.modules.forEach(module => {
                     moduleSelect.innerHTML += `<option value="${module.moduleId}">${module.moduleName}</option>`;
                 });
             }
@@ -585,20 +547,16 @@ function loadRetakeData() {
     });
     
     // تحميل الطلاب
-    const studentsData = {
+    callAppsScript({
         action: 'getStudents',
         username: currentUser.username,
         password: currentUser.password
-    };
-    
-    jsonpRequest(studentsData, function(studentsResponse) {
-        console.log('📥 الطلاب للاستدراك:', studentsResponse);
-        
-        if (studentsResponse && studentsResponse.success) {
-            const studentSelect = document.getElementById('retakeStudentId');
+    }, function(response) {
+        if (response && response.success) {
+            const studentSelect = document.getElementById('studentId');
             if (studentSelect) {
                 studentSelect.innerHTML = '<option value="">اختر الطالب...</option>';
-                studentsResponse.students.forEach(student => {
+                response.students.forEach(student => {
                     studentSelect.innerHTML += `<option value="${student.studentId}">${student.name}</option>`;
                 });
             }
@@ -606,100 +564,35 @@ function loadRetakeData() {
     });
 }
 
-// تحميل بيانات الإحصائيات
-function loadStatisticsData() {
-    const data = {
-        action: 'getStatistics',
-        username: currentUser.username,
-        password: currentUser.password
-    };
-    
-    jsonpRequest(data, function(response) {
-        console.log('📥 إحصائيات كاملة:', response);
-        
-        if (response && response.success) {
-            // رسم بياني للمقاييس
-            const ctx1 = document.getElementById('modulesChart').getContext('2d');
-            new Chart(ctx1, {
-                type: 'pie',
-                data: {
-                    labels: response.statistics.topModules.map(m => m.moduleName),
-                    datasets: [{
-                        data: response.statistics.topModules.map(m => m.count),
-                        backgroundColor: [
-                            '#667eea', '#2ecc71', '#f1c40f', '#e74c3c', '#9b59b6'
-                        ]
-                    }]
-                }
-            });
-            
-            // رسم بياني للشهور
-            const months = Object.keys(response.statistics.absencesByMonth);
-            const counts = Object.values(response.statistics.absencesByMonth);
-            
-            const ctx2 = document.getElementById('monthlyChart').getContext('2d');
-            new Chart(ctx2, {
-                type: 'line',
-                data: {
-                    labels: months,
-                    datasets: [{
-                        label: 'عدد الغيابات',
-                        data: counts,
-                        borderColor: '#667eea',
-                        tension: 0.1
-                    }]
-                }
-            });
-            
-            // جدول التفاصيل
-            const tbody = document.getElementById('statsTableBody');
-            tbody.innerHTML = '';
-            
-            response.statistics.topModules.forEach(module => {
-                const row = tbody.insertRow();
-                const percentage = ((module.count / response.statistics.totalAbsences) * 100).toFixed(1);
-                row.innerHTML = `
-                    <td>${module.moduleName}</td>
-                    <td>${module.count}</td>
-                    <td>${percentage}%</td>
-                `;
-            });
-        }
-    });
-}
-
-// تحميل المواد للقوائم المنسدلة
-function loadModulesForSelect() {
-    const modulesData = {
+function loadRetakeData() {
+    // تحميل المواد
+    callAppsScript({
         action: 'getModules',
         username: currentUser.username,
         password: currentUser.password
-    };
-    
-    jsonpRequest(modulesData, function(modulesResponse) {
-        if (modulesResponse && modulesResponse.success) {
-            const moduleSelect = document.getElementById('moduleId');
+    }, function(response) {
+        if (response && response.success) {
+            const moduleSelect = document.getElementById('retakeModuleId');
             if (moduleSelect) {
                 moduleSelect.innerHTML = '<option value="">اختر المادة...</option>';
-                modulesResponse.modules.forEach(module => {
+                response.modules.forEach(module => {
                     moduleSelect.innerHTML += `<option value="${module.moduleId}">${module.moduleName}</option>`;
                 });
             }
         }
     });
     
-    const studentsData = {
+    // تحميل الطلاب
+    callAppsScript({
         action: 'getStudents',
         username: currentUser.username,
         password: currentUser.password
-    };
-    
-    jsonpRequest(studentsData, function(studentsResponse) {
-        if (studentsResponse && studentsResponse.success) {
-            const studentSelect = document.getElementById('studentId');
+    }, function(response) {
+        if (response && response.success) {
+            const studentSelect = document.getElementById('retakeStudentId');
             if (studentSelect) {
                 studentSelect.innerHTML = '<option value="">اختر الطالب...</option>';
-                studentsResponse.students.forEach(student => {
+                response.students.forEach(student => {
                     studentSelect.innerHTML += `<option value="${student.studentId}">${student.name}</option>`;
                 });
             }
@@ -707,9 +600,67 @@ function loadModulesForSelect() {
     });
 }
 
-// ==================== دوال الإجراءات باستخدام JSONP ====================
+function loadStatisticsData() {
+    callAppsScript({
+        action: 'getStatistics',
+        username: currentUser.username,
+        password: currentUser.password
+    }, function(response) {
+        if (response && response.success) {
+            // رسم بياني للمقاييس
+            const ctx1 = document.getElementById('modulesChart')?.getContext('2d');
+            if (ctx1 && response.statistics.topModules.length > 0) {
+                new Chart(ctx1, {
+                    type: 'pie',
+                    data: {
+                        labels: response.statistics.topModules.map(m => m.moduleName),
+                        datasets: [{
+                            data: response.statistics.topModules.map(m => m.count),
+                            backgroundColor: ['#667eea', '#2ecc71', '#f1c40f', '#e74c3c', '#9b59b6']
+                        }]
+                    }
+                });
+            }
+            
+            // رسم بياني للشهور
+            const months = Object.keys(response.statistics.absencesByMonth);
+            const counts = Object.values(response.statistics.absencesByMonth);
+            const ctx2 = document.getElementById('monthlyChart')?.getContext('2d');
+            if (ctx2 && months.length > 0) {
+                new Chart(ctx2, {
+                    type: 'line',
+                    data: {
+                        labels: months,
+                        datasets: [{
+                            label: 'عدد الغيابات',
+                            data: counts,
+                            borderColor: '#667eea',
+                            tension: 0.1
+                        }]
+                    }
+                });
+            }
+            
+            // جدول التفاصيل
+            const tbody = document.getElementById('statsTableBody');
+            if (tbody) {
+                tbody.innerHTML = '';
+                response.statistics.topModules.forEach(module => {
+                    const percentage = ((module.count / response.statistics.totalAbsences) * 100).toFixed(1);
+                    tbody.innerHTML += `
+                        <tr>
+                            <td>${module.moduleName}</td>
+                            <td>${module.count}</td>
+                            <td>${percentage}%</td>
+                        </tr>
+                    `;
+                });
+            }
+        }
+    });
+}
 
-// إضافة طالب
+// ==================== دوال الإجراءات ====================
 function addStudent(event) {
     event.preventDefault();
     
@@ -723,21 +674,10 @@ function addStudent(event) {
         year: document.getElementById('studentYear').value
     };
     
-    console.log('📤 إرسال طالب:', studentData);
-    
-    jsonpRequest(studentData, function(response) {
-        console.log('📥 رد الإضافة:', response);
-        
+    callAppsScript(studentData, function(response) {
         if (response && response.success) {
             alert('✅ تم إضافة الطالب بنجاح');
-            
-            // تفريغ الحقول
-            document.getElementById('studentName').value = '';
-            document.getElementById('studentEmail').value = '';
-            document.getElementById('studentMajor').value = '';
-            document.getElementById('studentYear').value = '';
-            
-            // إعادة تحميل قائمة الطلاب
+            document.getElementById('studentForm').reset();
             loadPage('students');
         } else {
             alert('❌ خطأ: ' + (response?.message || 'فشل إضافة الطالب'));
@@ -745,7 +685,6 @@ function addStudent(event) {
     });
 }
 
-// تسجيل غياب
 function addAbsence(event) {
     event.preventDefault();
     
@@ -759,11 +698,7 @@ function addAbsence(event) {
         reason: document.getElementById('reason').value
     };
     
-    console.log('📤 تسجيل غياب:', absenceData);
-    
-    jsonpRequest(absenceData, function(response) {
-        console.log('📥 رد الغياب:', response);
-        
+    callAppsScript(absenceData, function(response) {
         if (response && response.success) {
             alert('✅ تم تسجيل الغياب بنجاح');
             document.getElementById('absenceForm').reset();
@@ -774,7 +709,6 @@ function addAbsence(event) {
     });
 }
 
-// إنشاء امتحان استدراك
 function createRetakeExam(event) {
     event.preventDefault();
     
@@ -788,11 +722,7 @@ function createRetakeExam(event) {
         room: document.getElementById('retakeRoom').value
     };
     
-    console.log('📤 إنشاء استدراك:', retakeData);
-    
-    jsonpRequest(retakeData, function(response) {
-        console.log('📥 رد الاستدراك:', response);
-        
+    callAppsScript(retakeData, function(response) {
         if (response && response.success) {
             alert('✅ تم إنشاء امتحان الاستدراك بنجاح');
             document.getElementById('retakeForm').reset();
@@ -803,7 +733,6 @@ function createRetakeExam(event) {
     });
 }
 
-// تحديث حالة الغياب
 function updateAbsenceStatus(absenceId, status) {
     const statusData = {
         action: 'updateAbsenceStatus',
@@ -813,11 +742,7 @@ function updateAbsenceStatus(absenceId, status) {
         status: status
     };
     
-    console.log('📤 تحديث حالة:', statusData);
-    
-    jsonpRequest(statusData, function(response) {
-        console.log('📥 رد التحديث:', response);
-        
+    callAppsScript(statusData, function(response) {
         if (response && response.success) {
             alert('✅ تم تحديث الحالة بنجاح');
             loadPage(currentPage);
@@ -826,3 +751,6 @@ function updateAbsenceStatus(absenceId, status) {
         }
     });
 }
+
+// ==================== اختبار الاتصال ====================
+console.log('🚀 التطبيق جاهز، الرابط:', APPS_SCRIPT_URL);
