@@ -1,5 +1,5 @@
 // ==================== الرابط الرئيسي ====================
-const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwvlyXwWbG8y82x4LQOtvrolcP1fAcuZQxrqOI1XuZ2wYkc9r5df6n7Fe1QeQ1sUmET/exec';
+const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbyo1vB4L2y25qAggxXw3AG-XnCPQI39WwS1amuAPIDuPJkTjPzmM1zrz-RSSZaF5B24/exec';
 
 // ==================== متغيرات عامة ====================
 let currentUser = null;
