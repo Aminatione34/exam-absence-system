@@ -1,4 +1,38 @@
-// متغيرات عامة
+// دالة JSONP للاتصال بـ Apps Script
+function jsonpRequest(data, callback) {
+    const callbackName = 'callback' + Date.now();
+    
+    // تحويل البيانات إلى query string
+    const queryString = Object.keys(data).map(key => {
+        const value = typeof data[key] === 'object' ? 
+            JSON.stringify(data[key]) : data[key];
+        return encodeURIComponent(key) + '=' + encodeURIComponent(value);
+    }).join('&');
+    
+    const url = APPS_SCRIPT_URL + '?callback=' + callbackName + '&' + queryString;
+    
+    // إنشاء دالة الكولباك
+    window[callbackName] = function(response) {
+        if (document.head.contains(script)) {
+            document.head.removeChild(script);
+        }
+        delete window[callbackName];
+        callback(response);
+    };
+    
+    // إنشاء عنصر script وإضافته
+    const script = document.createElement('script');
+    script.src = url;
+    script.onerror = function() {
+        alert('❌ فشل الاتصال بالخادم');
+        if (document.head.contains(script)) {
+            document.head.removeChild(script);
+        }
+        delete window[callbackName];
+    };
+    document.head.appendChild(script);
+}
+
 const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwvlyXwWbG8y82x4LQOtvrolcP1fAcuZQxrqOI1XuZ2wYkc9r5df6n7Fe1QeQ1sUmET/exec';
 let currentUser = null;
 let currentPage = 'dashboard';
@@ -65,7 +99,7 @@ function setActiveNav(activeItem) {
 }
 
 // تحميل الصفحة المطلوبة
-async function loadPage(page) {
+function loadPage(page) {
     const contentBody = document.getElementById('contentBody');
     
     switch(page) {
@@ -355,35 +389,34 @@ function getStatisticsHTML() {
     `;
 }
 
-// دوال تحميل البيانات
-async function loadDashboardData() {
-    try {
-        const response = await fetch(APPS_SCRIPT_URL, {
-            method: 'POST',
-            body: JSON.stringify({
-                action: 'getStatistics',
-                username: currentUser.username,
-                password: currentUser.password
-            })
-        });
+// ==================== دوال تحميل البيانات باستخدام JSONP ====================
+
+// تحميل بيانات لوحة التحكم
+function loadDashboardData() {
+    const data = {
+        action: 'getStatistics',
+        username: currentUser.username,
+        password: currentUser.password
+    };
+    
+    jsonpRequest(data, function(response) {
+        console.log('📥 إحصائيات:', response);
         
-        const data = await response.json();
-        
-        if (data.success) {
-            document.getElementById('totalAbsences').textContent = data.statistics.totalAbsences;
-            document.getElementById('pendingJustifications').textContent = data.statistics.pendingJustifications;
-            document.getElementById('approvedJustifications').textContent = data.statistics.approvedJustifications;
-            document.getElementById('eligibleStudents').textContent = data.statistics.approvedJustifications;
+        if (response && response.success) {
+            document.getElementById('totalAbsences').textContent = response.statistics.totalAbsences;
+            document.getElementById('pendingJustifications').textContent = response.statistics.pendingJustifications;
+            document.getElementById('approvedJustifications').textContent = response.statistics.approvedJustifications;
+            document.getElementById('eligibleStudents').textContent = response.statistics.approvedJustifications;
             
             // رسم بياني
             const ctx = document.getElementById('absencesChart').getContext('2d');
             new Chart(ctx, {
                 type: 'bar',
                 data: {
-                    labels: data.statistics.topModules.map(m => m.moduleName),
+                    labels: response.statistics.topModules.map(m => m.moduleName),
                     datasets: [{
                         label: 'عدد الغيابات',
-                        data: data.statistics.topModules.map(m => m.count),
+                        data: response.statistics.topModules.map(m => m.count),
                         backgroundColor: 'rgba(102, 126, 234, 0.5)',
                         borderColor: 'rgba(102, 126, 234, 1)',
                         borderWidth: 1
@@ -398,29 +431,25 @@ async function loadDashboardData() {
                 }
             });
         }
-    } catch(error) {
-        console.error('Error loading dashboard:', error);
-    }
+    });
 }
 
-async function loadAbsencesData() {
-    try {
-        const response = await fetch(APPS_SCRIPT_URL, {
-            method: 'POST',
-            body: JSON.stringify({
-                action: 'getAbsences',
-                username: currentUser.username,
-                password: currentUser.password
-            })
-        });
+// تحميل بيانات الغيابات
+function loadAbsencesData() {
+    const data = {
+        action: 'getAbsences',
+        username: currentUser.username,
+        password: currentUser.password
+    };
+    
+    jsonpRequest(data, function(response) {
+        console.log('📥 الغيابات:', response);
         
-        const data = await response.json();
-        
-        if (data.success) {
+        if (response && response.success) {
             const tbody = document.getElementById('absencesTableBody');
             tbody.innerHTML = '';
             
-            data.absences.forEach(absence => {
+            response.absences.forEach(absence => {
                 const row = tbody.insertRow();
                 row.innerHTML = `
                     <td>${absence.absenceId}</td>
@@ -445,29 +474,28 @@ async function loadAbsencesData() {
                 `;
             });
         }
-    } catch(error) {
-        console.error('Error loading absences:', error);
-    }
+        
+        // تحميل البيانات للقوائم المنسدلة
+        loadModulesForSelect();
+    });
 }
 
-async function loadJustificationsData() {
-    try {
-        const response = await fetch(APPS_SCRIPT_URL, {
-            method: 'POST',
-            body: JSON.stringify({
-                action: 'getAbsences',
-                username: currentUser.username,
-                password: currentUser.password
-            })
-        });
+// تحميل بيانات التبريرات
+function loadJustificationsData() {
+    const data = {
+        action: 'getAbsences',
+        username: currentUser.username,
+        password: currentUser.password
+    };
+    
+    jsonpRequest(data, function(response) {
+        console.log('📥 التبريرات:', response);
         
-        const data = await response.json();
-        
-        if (data.success) {
+        if (response && response.success) {
             const tbody = document.getElementById('justificationsTableBody');
             tbody.innerHTML = '';
             
-            data.absences.filter(a => a.justificationFile).forEach(absence => {
+            response.absences.filter(a => a.justificationFile).forEach(absence => {
                 const row = tbody.insertRow();
                 row.innerHTML = `
                     <td>${absence.absenceId}</td>
@@ -498,29 +526,25 @@ async function loadJustificationsData() {
                 `;
             });
         }
-    } catch(error) {
-        console.error('Error loading justifications:', error);
-    }
+    });
 }
 
-async function loadStudentsData() {
-    try {
-        const response = await fetch(APPS_SCRIPT_URL, {
-            method: 'POST',
-            body: JSON.stringify({
-                action: 'getStudents',
-                username: currentUser.username,
-                password: currentUser.password
-            })
-        });
+// تحميل بيانات الطلاب
+function loadStudentsData() {
+    const data = {
+        action: 'getStudents',
+        username: currentUser.username,
+        password: currentUser.password
+    };
+    
+    jsonpRequest(data, function(response) {
+        console.log('📥 الطلاب:', response);
         
-        const data = await response.json();
-        
-        if (data.success) {
+        if (response && response.success) {
             const tbody = document.getElementById('studentsTableBody');
             tbody.innerHTML = '';
             
-            data.students.forEach(student => {
+            response.students.forEach(student => {
                 const row = tbody.insertRow();
                 row.innerHTML = `
                     <td>${student.studentId}</td>
@@ -534,83 +558,74 @@ async function loadStudentsData() {
         
         // تحميل المواد للقوائم المنسدلة
         loadModulesForSelect();
-    } catch(error) {
-        console.error('Error loading students:', error);
-    }
+    });
 }
 
-async function loadRetakeData() {
-    try {
-        const response = await fetch(APPS_SCRIPT_URL, {
-            method: 'POST',
-            body: JSON.stringify({
-                action: 'getModules',
-                username: currentUser.username,
-                password: currentUser.password
-            })
-        });
+// تحميل بيانات الاستدراك
+function loadRetakeData() {
+    // تحميل المواد
+    const modulesData = {
+        action: 'getModules',
+        username: currentUser.username,
+        password: currentUser.password
+    };
+    
+    jsonpRequest(modulesData, function(modulesResponse) {
+        console.log('📥 المواد:', modulesResponse);
         
-        const data = await response.json();
-        
-        if (data.success) {
-            // تعبئة قائمة المواد
+        if (modulesResponse && modulesResponse.success) {
             const moduleSelect = document.getElementById('retakeModuleId');
             if (moduleSelect) {
                 moduleSelect.innerHTML = '<option value="">اختر المادة...</option>';
-                data.modules.forEach(module => {
+                modulesResponse.modules.forEach(module => {
                     moduleSelect.innerHTML += `<option value="${module.moduleId}">${module.moduleName}</option>`;
                 });
             }
         }
+    });
+    
+    // تحميل الطلاب
+    const studentsData = {
+        action: 'getStudents',
+        username: currentUser.username,
+        password: currentUser.password
+    };
+    
+    jsonpRequest(studentsData, function(studentsResponse) {
+        console.log('📥 الطلاب للاستدراك:', studentsResponse);
         
-        // تحميل الطلاب
-        const studentsResponse = await fetch(APPS_SCRIPT_URL, {
-            method: 'POST',
-            body: JSON.stringify({
-                action: 'getStudents',
-                username: currentUser.username,
-                password: currentUser.password
-            })
-        });
-        
-        const studentsData = await studentsResponse.json();
-        
-        if (studentsData.success) {
+        if (studentsResponse && studentsResponse.success) {
             const studentSelect = document.getElementById('retakeStudentId');
             if (studentSelect) {
                 studentSelect.innerHTML = '<option value="">اختر الطالب...</option>';
-                studentsData.students.forEach(student => {
+                studentsResponse.students.forEach(student => {
                     studentSelect.innerHTML += `<option value="${student.studentId}">${student.name}</option>`;
                 });
             }
         }
-    } catch(error) {
-        console.error('Error loading retake data:', error);
-    }
+    });
 }
 
-async function loadStatisticsData() {
-    try {
-        const response = await fetch(APPS_SCRIPT_URL, {
-            method: 'POST',
-            body: JSON.stringify({
-                action: 'getStatistics',
-                username: currentUser.username,
-                password: currentUser.password
-            })
-        });
+// تحميل بيانات الإحصائيات
+function loadStatisticsData() {
+    const data = {
+        action: 'getStatistics',
+        username: currentUser.username,
+        password: currentUser.password
+    };
+    
+    jsonpRequest(data, function(response) {
+        console.log('📥 إحصائيات كاملة:', response);
         
-        const data = await response.json();
-        
-        if (data.success) {
+        if (response && response.success) {
             // رسم بياني للمقاييس
             const ctx1 = document.getElementById('modulesChart').getContext('2d');
             new Chart(ctx1, {
                 type: 'pie',
                 data: {
-                    labels: data.statistics.topModules.map(m => m.moduleName),
+                    labels: response.statistics.topModules.map(m => m.moduleName),
                     datasets: [{
-                        data: data.statistics.topModules.map(m => m.count),
+                        data: response.statistics.topModules.map(m => m.count),
                         backgroundColor: [
                             '#667eea', '#2ecc71', '#f1c40f', '#e74c3c', '#9b59b6'
                         ]
@@ -619,8 +634,8 @@ async function loadStatisticsData() {
             });
             
             // رسم بياني للشهور
-            const months = Object.keys(data.statistics.absencesByMonth);
-            const counts = Object.values(data.statistics.absencesByMonth);
+            const months = Object.keys(response.statistics.absencesByMonth);
+            const counts = Object.values(response.statistics.absencesByMonth);
             
             const ctx2 = document.getElementById('monthlyChart').getContext('2d');
             new Chart(ctx2, {
@@ -640,9 +655,9 @@ async function loadStatisticsData() {
             const tbody = document.getElementById('statsTableBody');
             tbody.innerHTML = '';
             
-            data.statistics.topModules.forEach(module => {
+            response.statistics.topModules.forEach(module => {
                 const row = tbody.insertRow();
-                const percentage = ((module.count / data.statistics.totalAbsences) * 100).toFixed(1);
+                const percentage = ((module.count / response.statistics.totalAbsences) * 100).toFixed(1);
                 row.innerHTML = `
                     <td>${module.moduleName}</td>
                     <td>${module.count}</td>
@@ -650,169 +665,164 @@ async function loadStatisticsData() {
                 `;
             });
         }
-    } catch(error) {
-        console.error('Error loading statistics:', error);
-    }
+    });
 }
 
-async function loadModulesForSelect() {
-    try {
-        const response = await fetch(APPS_SCRIPT_URL, {
-            method: 'POST',
-            body: JSON.stringify({
-                action: 'getModules',
-                username: currentUser.username,
-                password: currentUser.password
-            })
-        });
-        
-        const data = await response.json();
-        
-        if (data.success) {
+// تحميل المواد للقوائم المنسدلة
+function loadModulesForSelect() {
+    const modulesData = {
+        action: 'getModules',
+        username: currentUser.username,
+        password: currentUser.password
+    };
+    
+    jsonpRequest(modulesData, function(modulesResponse) {
+        if (modulesResponse && modulesResponse.success) {
             const moduleSelect = document.getElementById('moduleId');
             if (moduleSelect) {
                 moduleSelect.innerHTML = '<option value="">اختر المادة...</option>';
-                data.modules.forEach(module => {
+                modulesResponse.modules.forEach(module => {
                     moduleSelect.innerHTML += `<option value="${module.moduleId}">${module.moduleName}</option>`;
                 });
             }
-            
-            // تحميل الطلاب
-            const studentsResponse = await fetch(APPS_SCRIPT_URL, {
-                method: 'POST',
-                body: JSON.stringify({
-                    action: 'getStudents',
-                    username: currentUser.username,
-                    password: currentUser.password
-                })
-            });
-            
-            const studentsData = await studentsResponse.json();
-            
-            if (studentsData.success) {
-                const studentSelect = document.getElementById('studentId');
-                if (studentSelect) {
-                    studentSelect.innerHTML = '<option value="">اختر الطالب...</option>';
-                    studentsData.students.forEach(student => {
-                        studentSelect.innerHTML += `<option value="${student.studentId}">${student.name}</option>`;
-                    });
-                }
+        }
+    });
+    
+    const studentsData = {
+        action: 'getStudents',
+        username: currentUser.username,
+        password: currentUser.password
+    };
+    
+    jsonpRequest(studentsData, function(studentsResponse) {
+        if (studentsResponse && studentsResponse.success) {
+            const studentSelect = document.getElementById('studentId');
+            if (studentSelect) {
+                studentSelect.innerHTML = '<option value="">اختر الطالب...</option>';
+                studentsResponse.students.forEach(student => {
+                    studentSelect.innerHTML += `<option value="${student.studentId}">${student.name}</option>`;
+                });
             }
         }
-    } catch(error) {
-        console.error('Error loading modules:', error);
-    }
+    });
 }
 
-// دوال الإجراءات
-async function updateAbsenceStatus(absenceId, status) {
-    try {
-        const response = await fetch(APPS_SCRIPT_URL, {
-            method: 'POST',
-            body: JSON.stringify({
-                action: 'updateAbsenceStatus',
-                username: currentUser.username,
-                password: currentUser.password,
-                absenceId: absenceId,
-                status: status
-            })
-        });
-        
-        const data = await response.json();
-        
-        if (data.success) {
-            alert('تم تحديث الحالة بنجاح');
-            loadPage(currentPage);
-        }
-    } catch(error) {
-        console.error('Error updating status:', error);
-        alert('حدث خطأ في تحديث الحالة');
-    }
-}
+// ==================== دوال الإجراءات باستخدام JSONP ====================
 
-async function addAbsence(event) {
+// إضافة طالب
+function addStudent(event) {
     event.preventDefault();
     
-    try {
-        const response = await fetch(APPS_SCRIPT_URL, {
-            method: 'POST',
-            body: JSON.stringify({
-                action: 'addAbsence',
-                username: currentUser.username,
-                password: currentUser.password,
-                studentId: document.getElementById('studentId').value,
-                moduleId: document.getElementById('moduleId').value,
-                examDate: document.getElementById('examDate').value,
-                reason: document.getElementById('reason').value
-            })
-        });
-        
-        const data = await response.json();
-        
-        if (data.success) {
-            alert('تم تسجيل الغياب بنجاح');
-            loadPage('absences');
-        }
-    } catch(error) {
-        console.error('Error adding absence:', error);
-        alert('حدث خطأ في تسجيل الغياب');
-    }
-}
-
-async function addStudent(event) {
-    event.preventDefault();
+    const studentData = {
+        action: 'addStudent',
+        username: currentUser.username,
+        password: currentUser.password,
+        name: document.getElementById('studentName').value,
+        email: document.getElementById('studentEmail').value,
+        major: document.getElementById('studentMajor').value,
+        year: document.getElementById('studentYear').value
+    };
     
-    try {
-        const response = await fetch(APPS_SCRIPT_URL, {
-            method: 'POST',
-            body: JSON.stringify({
-                action: 'addStudent',
-                username: currentUser.username,
-                password: currentUser.password,
-                name: document.getElementById('studentName').value,
-                email: document.getElementById('studentEmail').value,
-                major: document.getElementById('studentMajor').value,
-                year: document.getElementById('studentYear').value
-            })
-        });
+    console.log('📤 إرسال طالب:', studentData);
+    
+    jsonpRequest(studentData, function(response) {
+        console.log('📥 رد الإضافة:', response);
         
-        const data = await response.json();
-        
-        if (data.success) {
-            alert('تم إضافة الطالب بنجاح');
+        if (response && response.success) {
+            alert('✅ تم إضافة الطالب بنجاح');
+            
+            // تفريغ الحقول
+            document.getElementById('studentName').value = '';
+            document.getElementById('studentEmail').value = '';
+            document.getElementById('studentMajor').value = '';
+            document.getElementById('studentYear').value = '';
+            
+            // إعادة تحميل قائمة الطلاب
             loadPage('students');
+        } else {
+            alert('❌ خطأ: ' + (response?.message || 'فشل إضافة الطالب'));
         }
-    } catch(error) {
-        console.error('Error adding student:', error);
-        alert('حدث خطأ في إضافة الطالب');
-    }
+    });
 }
 
-async function createRetakeExam(event) {
+// تسجيل غياب
+function addAbsence(event) {
     event.preventDefault();
     
-    try {
-        const response = await fetch(APPS_SCRIPT_URL, {
-            method: 'POST',
-            body: JSON.stringify({
-                action: 'createRetakeExam',
-                username: currentUser.username,
-                password: currentUser.password,
-                studentId: document.getElementById('retakeStudentId').value,
-                moduleId: document.getElementById('retakeModuleId').value,
-                retakeDate: document.getElementById('retakeDate').value,
-                room: document.getElementById('retakeRoom').value
-            })
-        });
+    const absenceData = {
+        action: 'addAbsence',
+        username: currentUser.username,
+        password: currentUser.password,
+        studentId: document.getElementById('studentId').value,
+        moduleId: document.getElementById('moduleId').value,
+        examDate: document.getElementById('examDate').value,
+        reason: document.getElementById('reason').value
+    };
+    
+    console.log('📤 تسجيل غياب:', absenceData);
+    
+    jsonpRequest(absenceData, function(response) {
+        console.log('📥 رد الغياب:', response);
         
-        const data = await response.json();
-        
-        if (data.success) {
-            alert('تم إنشاء امتحان الاستدراك بنجاح');
-            loadPage('retake');
+        if (response && response.success) {
+            alert('✅ تم تسجيل الغياب بنجاح');
+            document.getElementById('absenceForm').reset();
+            loadPage('absences');
+        } else {
+            alert('❌ خطأ: ' + (response?.message || 'فشل تسجيل الغياب'));
         }
-    } catch(error) {
-        console.error('Error creating retake:', error);
-        alert('حدث خطأ في إنشاء الامتحان');
-    }
+    });
+}
+
+// إنشاء امتحان استدراك
+function createRetakeExam(event) {
+    event.preventDefault();
+    
+    const retakeData = {
+        action: 'createRetakeExam',
+        username: currentUser.username,
+        password: currentUser.password,
+        studentId: document.getElementById('retakeStudentId').value,
+        moduleId: document.getElementById('retakeModuleId').value,
+        retakeDate: document.getElementById('retakeDate').value,
+        room: document.getElementById('retakeRoom').value
+    };
+    
+    console.log('📤 إنشاء استدراك:', retakeData);
+    
+    jsonpRequest(retakeData, function(response) {
+        console.log('📥 رد الاستدراك:', response);
+        
+        if (response && response.success) {
+            alert('✅ تم إنشاء امتحان الاستدراك بنجاح');
+            document.getElementById('retakeForm').reset();
+            loadPage('retake');
+        } else {
+            alert('❌ خطأ: ' + (response?.message || 'فشل إنشاء الامتحان'));
+        }
+    });
+}
+
+// تحديث حالة الغياب
+function updateAbsenceStatus(absenceId, status) {
+    const statusData = {
+        action: 'updateAbsenceStatus',
+        username: currentUser.username,
+        password: currentUser.password,
+        absenceId: absenceId,
+        status: status
+    };
+    
+    console.log('📤 تحديث حالة:', statusData);
+    
+    jsonpRequest(statusData, function(response) {
+        console.log('📥 رد التحديث:', response);
+        
+        if (response && response.success) {
+            alert('✅ تم تحديث الحالة بنجاح');
+            loadPage(currentPage);
+        } else {
+            alert('❌ خطأ: ' + (response?.message || 'فشل تحديث الحالة'));
+        }
+    });
 }
