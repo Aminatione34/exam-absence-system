@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>نظام تتبع غيابات الامتحانات - تسجيل الدخول</title>
+    <link rel="stylesheet" href="style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@300;400;500;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+</head>
+<body>
+    <div class="login-container">
+        <div class="login-box">
+            <div class="login-header">
+                <i class="fas fa-university"></i>
+                <h1>نظام تتبع غيابات الامتحانات</h1>
+                <p>الرجاء إدخال بيانات الدخول</p>
+            </div>
+            
+            <form id="loginForm" class="login-form">
+                <div class="input-group">
+                    <i class="fas fa-user"></i>
+                    <input type="text" id="username" placeholder="اسم المستخدم" required>
+                </div>
+                
+                <div class="input-group">
+                    <i class="fas fa-lock"></i>
+                    <input type="password" id="password" placeholder="كلمة المرور" required>
+                </div>
+                
+                <button type="submit" class="login-btn">
+                    <span>دخول</span>
+                    <i class="fas fa-arrow-left"></i>
+                </button>
+            </form>
+            
+            <div id="errorMessage" class="error-message"></div>
+        </div>
+    </div>
+
+    <script>
+        // هنا حط رابط الـ API تاعك
+        const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwvlyXwWbG8y82x4LQOtvrolcP1fAcuZQxrqOI1XuZ2wYkc9r5df6n7Fe1QeQ1sUmET/exec';
+        
+        document.getElementById('loginForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            const username = document.getElementById('username').value;
+            const password = document.getElementById('password').value;
+            
+            try {
+                const response = await fetch(APPS_SCRIPT_URL, {
+                    method: 'POST',
+                    body: JSON.stringify({
+                        action: 'login',
+                        username: username,
+                        password: password
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    localStorage.setItem('user', JSON.stringify({
+                        username: username,
+                        role: data.role,
+                        userId: data.userId
+                    }));
+                    window.location.href = 'dashboard.html';
+                } else {
+                    document.getElementById('errorMessage').textContent = 'اسم المستخدم أو كلمة المرور غير صحيحة';
+                }
+            } catch(error) {
+                document.getElementById('errorMessage').textContent = 'حدث خطأ في الاتصال';
+            }
+        });
+    </script>
+</body>
+</html>
