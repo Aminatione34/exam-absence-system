@@ -1,5 +1,5 @@
 // ==================== API URL ====================
-const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbyo1vB4L2y25qAggxXw3AG-XnCPQI39WwS1amuAPIDuPJkTjPzmM1zrz-RSSZaF5B24/exec';
+const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzZb5szsFTp0drd7mhw_r6jlOy2OMRVBHZD0HzPWB5sYZpw5hIojbAKZfxIbsyfNBvq/exec';
 
 // ==================== GLOBAL VARIABLES ====================
 let currentUser = null;
