@@ -1,5 +1,5 @@
 // ==================== الرابط الرئيسي ====================
-const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbyo1vB4L2y25qAggxXw3AG-XnCPQI39WwS1amuAPIDuPJkTjPzmM1zrz-RSSZaF5B24/exec';
+const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwvlyXwWbG8y82x4LQOtvrolcP1fAcuZQxrqOI1XuZ2wYkc9r5df6n7Fe1QeQ1sUmET/exec';
 
 // ==================== متغيرات عامة ====================
 let currentUser = null;
@@ -32,7 +32,8 @@ function callAppsScript(data, callback) {
     script.src = url;
     
     script.onerror = function() {
-        alert('❌ فشل الاتصال بالخادم. تحقق من الرابط أو الإنترنت');
+        // فقط سجل الخطأ في الكونسول ولا تظهر alert تلقائي
+        console.error('❌ فشل الاتصال بالخادم:', url);
         if (document.getElementById(callbackName + '_script')) {
             document.head.removeChild(document.getElementById(callbackName + '_script'));
         }
@@ -46,10 +47,15 @@ function callAppsScript(data, callback) {
 // ==================== التحقق من تسجيل الدخول ====================
 document.addEventListener('DOMContentLoaded', function() {
     const userData = localStorage.getItem('user');
+    
+    // إذا كان في صفحة تسجيل الدخول، لا تفعل شيء
+    if (window.location.href.includes('index.html')) {
+        return;
+    }
+    
+    // إذا كان في صفحة dashboard ولم يسجل الدخول، ارجع لتسجيل الدخول
     if (!userData) {
-        if (!window.location.href.includes('index.html')) {
-            window.location.href = 'index.html';
-        }
+        window.location.href = 'index.html';
         return;
     }
     
@@ -96,12 +102,11 @@ document.addEventListener('DOMContentLoaded', function() {
     loadPage('dashboard');
 });
 
-// ==================== تبديل الشريط الجانبي ====================
+// ==================== دوال مساعدة ====================
 function toggleSidebar() {
     document.getElementById('sidebar').classList.toggle('collapsed');
 }
 
-// ==================== تسجيل الخروج ====================
 function logout() {
     localStorage.removeItem('user');
     window.location.href = 'index.html';
@@ -234,28 +239,6 @@ function getAbsencesHTML() {
                     </tr>
                 </thead>
                 <tbody id="absencesTableBody"></tbody>
-            </table>
-        </div>
-    `;
-}
-
-function getJustificationsHTML() {
-    return `
-        <div class="table-container">
-            <table class="data-table">
-                <thead>
-                    <tr>
-                        <th>رقم الغياب</th>
-                        <th>الطالب</th>
-                        <th>المادة</th>
-                        <th>التاريخ</th>
-                        <th>السبب</th>
-                        <th>ملف التبرير</th>
-                        <th>الحالة</th>
-                        <th>إجراءات</th>
-                    </tr>
-                </thead>
-                <tbody id="justificationsTableBody"></tbody>
             </table>
         </div>
     `;
@@ -751,6 +734,3 @@ function updateAbsenceStatus(absenceId, status) {
         }
     });
 }
-
-// ==================== اختبار الاتصال ====================
-console.log('🚀 التطبيق جاهز، الرابط:', APPS_SCRIPT_URL);
