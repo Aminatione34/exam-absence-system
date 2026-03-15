@@ -1,6 +1,5 @@
 // ==================== API URL ====================
-const APPS_SCRIPT_URL ='https://script.google.com/macros/s/AKfycbx8IokxzwAyQKPy2L3JiP4SSLpgrvohUeirTW2fogr9eGSJU2hhZP7h-J9qAomV31Et/exec';
-
+const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzC1B9FvEGQ53RzLvS2p7Y7Y7Y7Y7Y7Y7Y7Y7Y/exec';
 // ==================== GLOBAL VARIABLES ====================
 let currentUser = null;
 let currentPage = "dashboard";
